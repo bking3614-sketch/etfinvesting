@@ -1,0 +1,1700 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ETF 계절성 스위칭 백테스트 터미널 | Quant Alpha Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 상단 글로벌 네비게이션 헤더 -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-logo">
+          <i class="fa-solid fa-chart-line-up text-primary"></i>
+        </div>
+        <div class="brand-text">
+          <h1>종합 자산 배분 퀀트 터미널</h1>
+          <span class="sub-badge"><i class="fa-brands fa-yahoo text-warning"></i> Yahoo Finance 실시간 & 1970년대 합성 데이터 연동</span>
+        </div>
+      </div>
+
+      <!-- 🌟 상단 3대 메인 탭 네비게이션 🌟 -->
+      <nav class="main-tab-nav">
+        <button type="button" class="tab-btn active" id="tabBtnSeasonality" data-tab="seasonality">
+          <i class="fa-solid fa-chart-line-up"></i>
+          <span>ETF 계절성 스위칭 터미널</span>
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnPermanent" data-tab="permanent">
+          <i class="fa-solid fa-shield-halved"></i>
+          <span>영구 포트폴리오</span>
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnAllWeather" data-tab="allweather">
+          <i class="fa-solid fa-cloud-sun-rain"></i>
+          <span>올웨더 포트폴리오 (Ray Dalio)</span>
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnDynamic" data-tab="dynamic">
+          <i class="fa-solid fa-compass"></i>
+          <span>동적 자산 배분 (Dynamic)</span>
+        </button>
+      </nav>
+
+      <div class="nav-controls">
+        <div class="status-badge" id="dataStatusBadge">
+          <span class="status-dot pulsing"></span>
+          <span id="dataStatusText">Yahoo Finance 데이터 확인 중...</span>
+        </div>
+        <button class="btn-refresh" id="btnRefreshData" title="Yahoo Finance 최신 데이터 새로고침">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- ════════════════════════════════════════════════════════════
+         [Tab 1] ETF 계절성 스위칭 알파 터미널
+         ════════════════════════════════════════════════════════════ -->
+    <div class="tab-pane active" id="paneSeasonality">
+      <div class="main-layout">
+        <!-- 좌측 컨트롤 사이드바 -->
+        <aside class="control-panel">
+        <div class="panel-header">
+          <h2><i class="fa-solid fa-sliders"></i> 전략 파라미터 제어</h2>
+          <span class="panel-subtitle">계절성 스위칭 vs Buy & Hold 1:1 비교</span>
+        </div>
+
+        <form id="backtestForm" onsubmit="return false;">
+          <!-- 1. 초기 자본금 설정 -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="initCap"><i class="fa-solid fa-wallet"></i> 초기 자본금</label>
+              <span class="val-preview" id="initCapPreview">5,000만 원</span>
+            </div>
+            <div class="input-with-unit">
+              <input type="number" id="initCap" value="50000000" min="1000000" step="1000000">
+              <span class="unit">원</span>
+            </div>
+          </div>
+
+          <!-- 2. 월 적립금 설정 -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="monthlyAdd"><i class="fa-solid fa-piggy-bank"></i> 매월 첫날 적립금</label>
+              <span class="val-preview" id="monthlyAddPreview">50만 원</span>
+            </div>
+            <div class="input-with-unit">
+              <input type="number" id="monthlyAdd" value="500000" min="0" step="50000">
+              <span class="unit">원</span>
+            </div>
+          </div>
+
+          <!-- 🌟 투자 시작 및 종료 날짜 설정 (1970년 1월 1일 ~ 최신 날짜 지원) 🌟 -->
+          <div class="form-group">
+            <div class="label-row">
+              <label><i class="fa-solid fa-calendar-days"></i> 백테스트 투자 기간 설정</label>
+              <span class="val-preview" id="periodDurationPreview">전체 기간</span>
+            </div>
+            <div class="date-range-grid">
+              <div class="date-input-box">
+                <span class="sub-label">시작 날짜 (Start: 1970~)</span>
+                <input type="date" id="startDate" class="form-date-input" min="1970-01-01">
+              </div>
+              <div class="date-input-box">
+                <span class="sub-label">종료 날짜 (End: 최신)</span>
+                <input type="date" id="endDate" class="form-date-input">
+              </div>
+            </div>
+            <!-- 퀵 기간 프리셋 버튼 (2001년, 2008년 스트레스 테스트 포함) -->
+            <div class="quick-period-buttons">
+              <button type="button" class="btn-quick-period active" data-period="2001">2001~(위기포함)</button>
+              <button type="button" class="btn-quick-period" data-period="2008">2008~(금융위기)</button>
+              <button type="button" class="btn-quick-period" data-period="max">전체(1970~)</button>
+              <button type="button" class="btn-quick-period" data-period="10y">최근 10년</button>
+              <button type="button" class="btn-quick-period" data-period="covid">2020~현재</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- 3. 투자 대상 ETF / 종목 검색 및 선택 (Yahoo Finance 검색 연동) -->
+          <div class="form-group">
+            <div class="label-row">
+              <label><i class="fa-solid fa-magnifying-glass-chart"></i> 종목 / ETF 검색 및 선택 (2종)</label>
+              <span class="sub-badge" style="font-size: 0.7rem;"><i class="fa-brands fa-yahoo text-warning"></i> 야후 파이낸스 검색</span>
+            </div>
+            <p class="field-desc" style="margin-bottom: 6px;">
+              티커(TQQQ, SOXL, 005930.KS) 또는 종목명(삼성전자, SK하이닉스 등)을 검색하세요.
+            </p>
+            <div class="etf-select-grid">
+              <!-- 종목 1 검색창 -->
+              <div class="select-box ticker-search-box">
+                <span class="sub-label">자산 1 (기본: SOXL)</span>
+                <div class="search-input-wrapper">
+                  <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                  <input type="text" id="etf1SearchInput" class="ticker-search-input" placeholder="티커 또는 종목명 검색..." autocomplete="off">
+                  <button type="button" class="btn-clear-search" id="etf1ClearBtn" title="초기화">&times;</button>
+                </div>
+                <div class="ticker-dropdown" id="etf1Dropdown"></div>
+                <div class="etf-badge" id="etf1Badge">필라델피아 반도체 3X</div>
+              </div>
+
+              <!-- 종목 2 검색창 -->
+              <div class="select-box ticker-search-box">
+                <span class="sub-label">자산 2 (기본: TQQQ)</span>
+                <div class="search-input-wrapper">
+                  <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                  <input type="text" id="etf2SearchInput" class="ticker-search-input" placeholder="티커 또는 종목명 검색..." autocomplete="off">
+                  <button type="button" class="btn-clear-search" id="etf2ClearBtn" title="초기화">&times;</button>
+                </div>
+                <div class="ticker-dropdown" id="etf2Dropdown"></div>
+                <div class="etf-badge" id="etf2Badge">나스닥100 3X</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. ETF 보유 비중 직접 설정 (TQQQ 등 개별 비중 직접 입력 & 슬라이더 양방향 연동) -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="ratioSlider"><i class="fa-solid fa-scale-balanced"></i> ETF 비중 직접 설정 (%)</label>
+              <span class="val-preview highlight" id="ratioSummary">SOXL 50% : TQQQ 50%</span>
+            </div>
+
+            <!-- 개별 비중 직접 숫자 입력창 2개 -->
+            <div class="dual-ratio-inputs">
+              <div class="ratio-input-card">
+                <span class="ticker-tag" id="inputEtf1Ticker">SOXL</span>
+                <div class="input-pct-wrapper">
+                  <input type="number" id="etf1RatioInput" min="0" max="100" value="50" step="1">
+                  <span class="pct-symbol">%</span>
+                </div>
+              </div>
+              <div class="ratio-separator">:</div>
+              <div class="ratio-input-card">
+                <span class="ticker-tag" id="inputEtf2Ticker">TQQQ</span>
+                <div class="input-pct-wrapper">
+                  <input type="number" id="etf2RatioInput" min="0" max="100" value="50" step="1">
+                  <span class="pct-symbol">%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 퀵 비중 프리셋 버튼들 -->
+            <div class="quick-ratio-buttons">
+              <button type="button" class="btn-quick-ratio" data-r1="50">50 : 50</button>
+              <button type="button" class="btn-quick-ratio" data-r1="70">70 : 30</button>
+              <button type="button" class="btn-quick-ratio" data-r1="30">30 : 70</button>
+              <button type="button" class="btn-quick-ratio" data-r1="100">100 : 0</button>
+              <button type="button" class="btn-quick-ratio" data-r1="0">0 : 100</button>
+            </div>
+
+            <!-- 슬라이더 & 비중 게이지 바 -->
+            <div class="slider-container">
+              <input type="range" id="ratioSlider" min="0" max="100" value="50" step="1">
+              <div class="ratio-bar">
+                <div class="ratio-fill-1" id="ratioFill1" style="width: 50%;"></div>
+                <div class="ratio-fill-2" id="ratioFill2" style="width: 50%;"></div>
+              </div>
+              <div class="ratio-labels">
+                <span id="sliderEtf1Label">SOXL: 50%</span>
+                <span id="sliderEtf2Label">TQQQ: 50%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- 5. 계절성(Seasonality) 달 선택 -->
+          <div class="form-group">
+            <div class="label-row">
+              <label><i class="fa-solid fa-calendar-days"></i> 강세 계절성 (매수 보유 달)</label>
+              <span class="count-badge" id="activeMonthsCount">6개월 보유</span>
+            </div>
+            <p class="field-desc">
+              체크된 달: <strong class="text-bull">ETF 1 + ETF 2</strong> 보유 / 미체크 달: <strong class="text-safe">SGOV(BIL) 100%</strong> 파킹
+            </p>
+
+            <!-- 프리셋 버튼들 -->
+            <div class="preset-buttons">
+              <button type="button" class="btn-preset active" data-preset="halloween" title="11월~4월 할로윈 효과">🎃 할로윈(11~4월)</button>
+              <button type="button" class="btn-preset" data-preset="santa" title="11월~1월 산타 랠리">🎅 산타(11~1월)</button>
+              <button type="button" class="btn-preset" data-preset="summer" title="6월~8월 서머 랠리">☀️ 서머(6~8월)</button>
+              <button type="button" class="btn-preset" data-preset="firstHalf" title="상반기 1~6월">🌱 상반기(1~6)</button>
+              <button type="button" class="btn-preset" data-preset="all" title="1~12월 전체 선택 (Buy & Hold와 동일)">💎 전체보유</button>
+              <button type="button" class="btn-preset" data-preset="clear" title="전체 해제 (100% 안전자산 파킹)">🛡️ 전량파킹</button>
+            </div>
+
+            <!-- 1월 ~ 12월 체크박스 그리드 -->
+            <div class="months-grid" id="monthsGrid">
+              <!-- JS로 1~12월 버튼 생성 -->
+            </div>
+          </div>
+
+          <!-- 🌟 리밸런싱 주기 설정 (1 ~ 360개월 슬라이더 & 숫자 입력창) 🌟 -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="rebalMonths"><i class="fa-solid fa-arrows-spin"></i> 정기 리밸런싱 주기 (Rebalancing)</label>
+              <span class="val-preview highlight" id="rebalMonthsPreview">1개월 (매월 리밸런싱)</span>
+            </div>
+            <p class="field-desc">
+              포트폴리오 자산 비중을 원래 목표치로 재조정하는 주기 (1~360개월). Buy & Hold 및 계절성 보유 구간 모두에 정기 리밸런싱이 적용됩니다.
+            </p>
+            <div class="rebal-control-container">
+              <div class="input-with-unit">
+                <input type="number" id="rebalMonths" value="1" min="1" max="360" step="1">
+                <span class="unit">개월</span>
+              </div>
+              <!-- 1 ~ 360개월 슬라이더 -->
+              <input type="range" id="rebalSlider" min="1" max="360" value="1" step="1" class="custom-range-slider" style="margin-top: 4px;">
+              <div class="quick-rebal-buttons">
+                <button type="button" class="btn-quick-rebal active" data-rebal="1">1개월(매월)</button>
+                <button type="button" class="btn-quick-rebal" data-rebal="3">3개월(분기)</button>
+                <button type="button" class="btn-quick-rebal" data-rebal="6">6개월(반기)</button>
+                <button type="button" class="btn-quick-rebal" data-rebal="12">12개월(1년)</button>
+                <button type="button" class="btn-quick-rebal" data-rebal="36">36개월(3년)</button>
+                <button type="button" class="btn-quick-rebal" data-rebal="60">60개월(5년)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6. 고급 설정 (접이식) -->
+          <details class="advanced-settings">
+            <summary><i class="fa-solid fa-gear"></i> 거래 비용 & 안전자산 설정</summary>
+            <div class="advanced-content">
+              <div class="form-subgroup">
+                <label for="feeRate">리밸런싱/스위칭 편도 거래비용 및 슬리피지 (%)</label>
+                <input type="number" id="feeRate" value="0.10" min="0" max="2" step="0.01">
+              </div>
+              <div class="form-subgroup">
+                <label>안전 자산 프록시</label>
+                <div class="static-pill"><i class="fa-solid fa-shield-halved"></i> SGOV / BIL (초단기 국채 0-3M)</div>
+              </div>
+            </div>
+          </details>
+
+          <!-- 7. 백테스트 실행 버튼 -->
+          <div class="action-btn-container">
+            <button type="button" class="btn-primary" id="btnRunBacktest">
+              <i class="fa-solid fa-bolt"></i>
+              <span>백테스트 실행</span>
+            </button>
+          </div>
+        </form>
+      </aside>
+
+      <!-- 우측 메인 대시보드 디스플레이 -->
+      <main class="dashboard-display">
+        <!-- 상단 전략 인포 바 -->
+        <section class="strategy-summary-bar" id="strategyInfoBar">
+          <div class="info-item">
+            <span class="info-lbl">포트폴리오 비중</span>
+            <span class="info-val" id="infoPortfolio">SOXL (50%) + TQQQ (50%)</span>
+          </div>
+          <div class="info-item">
+            <span class="info-lbl">계절성 매수 월</span>
+            <span class="info-val text-bull" id="infoSeasonMonths">1, 2, 3, 4, 11, 12월 (총 6개월)</span>
+          </div>
+          <div class="info-item">
+            <span class="info-lbl">리밸런싱 주기</span>
+            <span class="info-val text-primary" id="infoRebal">1개월 단위</span>
+          </div>
+          <div class="info-item">
+            <span class="info-lbl">데이터 소스</span>
+            <span class="info-val text-warning"><i class="fa-brands fa-yahoo"></i> Yahoo Finance</span>
+          </div>
+          <div class="info-item">
+            <span class="info-lbl">백테스트 기간</span>
+            <span class="info-val" id="infoPeriod">2001-01-01 ~ 현재</span>
+          </div>
+        </section>
+
+        <!-- 🌟 기초 지수(^NDX, ^SOX) 가상 합성 데이터 안내/경고 배너 🌟 -->
+        <div class="synthetic-warning-banner" id="syntheticWarningBanner">
+          <div class="banner-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div class="banner-content">
+            <strong class="banner-title">기초 지수(^NDX, ^SOX) 기반 가상 데이터 합성(Synthetic Data) 적용 안내</strong>
+            <p class="banner-desc" id="syntheticWarningText">
+              ⚠️ 2010년 이전 데이터는 기초 지수(^NDX, ^SOX)를 바탕으로 레버리지 배수를 곱해 합성된 가상 데이터(Synthetic Data)입니다. 롤오버 비용이 제외되어 실제보다 낙관적일 수 있습니다.
+            </p>
+          </div>
+          <span class="banner-tag">Synthetic Compounding</span>
+        </div>
+
+        <!-- 🌟 신규 추가: 백테스트 결과 자동 요약 (Executive Summary) 🌟 -->
+        <section class="summary-panel" id="summaryPanel">
+          <div class="summary-header">
+            <h3><i class="fa-solid fa-clipboard-check text-primary"></i> 백테스트 종합 성과 요약 (Executive Summary)</h3>
+            <span class="summary-tag">Quant Strategy Analysis Report</span>
+          </div>
+          <div class="summary-body" id="summaryBody">
+            <div class="summary-skeleton">백테스트를 실행하면 전략 요약 보고서가 생성됩니다.</div>
+          </div>
+        </section>
+
+        <!-- 🌟 신규 추가: 해당 전략 vs 단순 보유 전략 1:1 비교 표 (Comparison Matrix Table) 🌟 -->
+        <section class="table-panel comparison-matrix-panel">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-scale-unbalanced-flip text-primary"></i> 해당 전략 vs 단순 보유(Buy & Hold) 전략 성과 비교표</h3>
+            <span class="table-tag">Head-to-Head Performance Matrix</span>
+          </div>
+          <div class="table-responsive">
+            <table class="quant-table comparison-table" id="comparisonTable">
+              <thead>
+                <tr>
+                  <th style="width: 28%;">핵심 퀀트 지표 (Key Metrics)</th>
+                  <th style="width: 24%;" class="col-strat">계절성 스위칭 전략 🟢</th>
+                  <th style="width: 24%;" class="col-bh">단순 보유 전략 (Buy & Hold) 🔴</th>
+                  <th style="width: 24%;">성과 차이 / 우위 (Alpha)</th>
+                </tr>
+              </thead>
+              <tbody id="comparisonTableBody">
+                <!-- JS로 렌더링 -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 핵심 KPI 메트릭 카드 그리드 (CAGR, MDD, 최악의 해 MDD, TR, MAR 등) -->
+        <section class="metrics-grid">
+          <!-- 1. TR (총 누적 수익률) -->
+          <div class="metric-card hero-card">
+            <div class="card-icon"><i class="fa-solid fa-chart-line"></i></div>
+            <div class="metric-body">
+              <span class="card-title">TR (총 누적 수익률)</span>
+              <div class="val-main text-bull" id="mTrStrat">-</div>
+              <div class="comparison-row">
+                <span class="sub-label">Buy & Hold:</span>
+                <span class="sub-val" id="mTrBH">-</span>
+              </div>
+              <div class="sub-caption">원금 대비 총 순수익률</div>
+            </div>
+          </div>
+
+          <!-- 2. 연평균 CAGR -->
+          <div class="metric-card">
+            <div class="card-icon"><i class="fa-solid fa-trophy"></i></div>
+            <div class="metric-body">
+              <span class="card-title">연평균 CAGR (복리수익률)</span>
+              <div class="val-main text-bull" id="mCagrStrat">-</div>
+              <div class="comparison-row">
+                <span class="sub-label">Buy & Hold:</span>
+                <span class="sub-val" id="mCagrBH">-</span>
+              </div>
+              <div class="delta-tag" id="mCagrDelta">+0.0%p 초과 알파</div>
+            </div>
+          </div>
+
+          <!-- 3. 전체 기간 MDD -->
+          <div class="metric-card alert-card">
+            <div class="card-icon"><i class="fa-solid fa-shield-virus"></i></div>
+            <div class="metric-body">
+              <span class="card-title">전체 기간 MDD (최대 낙폭)</span>
+              <div class="val-main text-mdd" id="mMddStrat">-</div>
+              <div class="comparison-row">
+                <span class="sub-label">Buy & Hold:</span>
+                <span class="sub-val text-danger" id="mMddBH">-</span>
+              </div>
+              <div class="risk-reduction-tag" id="mMddReduction">MDD 방어율: -%p</div>
+            </div>
+          </div>
+
+          <!-- 4. 최악의 해의 MDD (Worst Year MDD) -->
+          <div class="metric-card alert-card">
+            <div class="card-icon"><i class="fa-solid fa-skull-crossbones"></i></div>
+            <div class="metric-body">
+              <span class="card-title">최악의 해의 MDD</span>
+              <div class="val-main text-mdd" id="mWorstMddStrat">-</div>
+              <div class="comparison-row">
+                <span class="sub-label">Buy & Hold:</span>
+                <span class="sub-val text-danger" id="mWorstMddBH">-</span>
+              </div>
+              <div class="sub-caption" id="mWorstMddDiff">최악의 해 방어력: -%p</div>
+            </div>
+          </div>
+
+          <!-- 5. MAR Ratio (CAGR / |MDD|) -->
+          <div class="metric-card">
+            <div class="card-icon"><i class="fa-solid fa-gauge-high"></i></div>
+            <div class="metric-body">
+              <span class="card-title">MAR 비율 (CAGR / |MDD|)</span>
+              <div class="val-main" id="mMarStrat">-</div>
+              <div class="comparison-row">
+                <span class="sub-label">Buy & Hold:</span>
+                <span class="sub-val" id="mMarBH">-</span>
+              </div>
+              <div class="sub-caption">단위 낙폭당 복리 수익 창출력</div>
+            </div>
+          </div>
+
+          <!-- 6. 최종 자산 평가액 -->
+          <div class="metric-card hero-card">
+            <div class="card-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+            <div class="metric-body">
+              <span class="card-title">최종 자산 평가액</span>
+              <div class="val-main text-bull" id="mFinalStrat">-</div>
+              <div class="comparison-row">
+                <span class="sub-label">Buy & Hold:</span>
+                <span class="sub-val" id="mFinalBH">-</span>
+              </div>
+              <div class="delta-tag" id="mFinalDelta">+0 원 (초과 알파)</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 차트 섹션 1: 자산 가치 성장 곡선 (Y축 로그 스케일 지원) -->
+        <section class="chart-panel">
+          <div class="chart-header">
+            <div class="chart-title-area">
+              <h3><i class="fa-solid fa-chart-area"></i> 누적 자산 가치 성장 곡선 (Growth of Wealth - Log Scale)</h3>
+              <p class="chart-subtitle">계절성 스위칭 포트폴리오 vs Buy & Hold 전략 (정기 리밸런싱 적용) vs 누적 투자원금</p>
+            </div>
+            <div class="chart-controls">
+              <div class="btn-group-toggle">
+                <button type="button" class="btn-toggle active" id="btnScaleLog">로그(Log)</button>
+                <button type="button" class="btn-toggle" id="btnScaleLinear">선형</button>
+              </div>
+            </div>
+          </div>
+          <!-- 차트 상단 굵은 경고 문구 -->
+          <div class="chart-notice-bar">
+            <i class="fa-solid fa-circle-exclamation text-warning"></i>
+            <span>⚠️ 2010년 이전 데이터는 기초 지수(^NDX, ^SOX)를 바탕으로 레버리지 배수를 곱해 합성된 가상 데이터(Synthetic Data)입니다. 롤오버 비용이 제외되어 실제보다 낙관적일 수 있습니다.</span>
+          </div>
+          <div class="chart-wrapper main-chart-wrapper">
+            <canvas id="equityChart"></canvas>
+          </div>
+        </section>
+
+        <!-- 차트 섹션 2: 언더워터 낙폭(MDD) 차트 -->
+        <section class="chart-panel">
+          <div class="chart-header">
+            <div class="chart-title-area">
+              <h3><i class="fa-solid fa-water"></i> 언더워터 낙폭 비교 차트 (Drawdown Underwater)</h3>
+              <p class="chart-subtitle">전고점 대비 하락률(%) 추이 - 폭락장 방어 능력 시각화</p>
+            </div>
+          </div>
+          <div class="chart-wrapper dd-chart-wrapper">
+            <canvas id="drawdownChart"></canvas>
+          </div>
+        </section>
+
+        <!-- 차트 섹션 3: 1월~12월 계절성 히트맵 & 연도별 수익률 비교 -->
+        <section class="charts-row">
+          <!-- 좌: 1월~12월 역대 월평균 수익률 분석 -->
+          <div class="chart-panel sub-chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-calendar-check"></i> 1월~12월 역대 계절성 분석</h3>
+                <p class="chart-subtitle">월별 평균 수익률(%) 및 전략 매수월 하이라이트</p>
+              </div>
+            </div>
+            <div class="chart-wrapper bar-chart-wrapper">
+              <canvas id="seasonalityChart"></canvas>
+            </div>
+          </div>
+
+          <!-- 우: 연도별 수익률 비교 바 차트 -->
+          <div class="chart-panel sub-chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-chart-column"></i> 연도별 수익률 비교 (Annual Returns)</h3>
+                <p class="chart-subtitle">계절성 전략 vs Buy & Hold 연도별 성과(%)</p>
+              </div>
+            </div>
+            <div class="chart-wrapper bar-chart-wrapper">
+              <canvas id="annualChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- 하단: 연도별 성과 상세 테이블 -->
+        <section class="table-panel">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-table-list"></i> 연도별 백테스트 상세 성과표</h3>
+            <span class="table-tag">Annual Performance & MDD Breakdown</span>
+          </div>
+          <div class="table-responsive">
+            <table class="quant-table" id="annualTable">
+              <thead>
+                <tr>
+                  <th>연도</th>
+                  <th>계절성 스위칭 수익률</th>
+                  <th>Buy & Hold 수익률</th>
+                  <th>초과 알파 (Alpha)</th>
+                  <th>계절성 연간 MDD</th>
+                  <th>Buy & Hold 연간 MDD</th>
+                  <th>계절성 연말 자산</th>
+                  <th>Buy & Hold 연말 자산</th>
+                  <th>누적 원금</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- JS 렌더링 -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div><!-- /paneSeasonality -->
+
+    <!-- ════════════════════════════════════════════════════════════
+         [Tab 2] 영구 포트폴리오 (Harry Browne's Permanent Portfolio)
+         ════════════════════════════════════════════════════════════ -->
+    <div class="tab-pane" id="panePermanent" style="display: none;">
+      <div class="main-layout">
+        <!-- 좌측 컨트롤 사이드바: 영구 포트폴리오 파라미터 -->
+        <aside class="control-panel">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-shield-halved text-primary"></i> 영구 포트폴리오 제어</h2>
+            <span class="panel-subtitle">Harry Browne's All-Weather Allocation (1970~현재)</span>
+          </div>
+
+          <form id="permForm" onsubmit="return false;">
+            <!-- 1. 초기 자본금 설정 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="permInitCap"><i class="fa-solid fa-wallet"></i> 초기 자본금</label>
+                <span class="val-preview" id="permInitCapPreview">5,000만 원</span>
+              </div>
+              <div class="input-with-unit">
+                <input type="number" id="permInitCap" value="50000000" min="1000000" step="1000000">
+                <span class="unit">원</span>
+              </div>
+            </div>
+
+            <!-- 2. 매월 적립금 설정 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="permMonthlyAdd"><i class="fa-solid fa-piggy-bank"></i> 매월 첫날 적립금</label>
+                <span class="val-preview" id="permMonthlyAddPreview">50만 원</span>
+              </div>
+              <div class="input-with-unit">
+                <input type="number" id="permMonthlyAdd" value="500000" min="0" step="50000">
+                <span class="unit">원</span>
+              </div>
+            </div>
+
+            <!-- 3. 백테스트 기간 설정 (1970-01-01부터) -->
+            <div class="form-group">
+              <div class="label-row">
+                <label><i class="fa-solid fa-calendar-days"></i> 백테스트 기간 설정 (1970~)</label>
+                <span class="val-preview" id="permPeriodPreview">1970년~현재 (54년)</span>
+              </div>
+              <div class="date-range-grid">
+                <div class="date-input-box">
+                  <span class="sub-label">시작 날짜 (Start: 1970~)</span>
+                  <input type="date" id="permStartDate" class="form-date-input" value="1970-01-02" min="1970-01-02">
+                </div>
+                <div class="date-input-box">
+                  <span class="sub-label">종료 날짜 (End: 최신)</span>
+                  <input type="date" id="permEndDate" class="form-date-input">
+                </div>
+              </div>
+              <!-- 영구 포트폴리오 전용 역사적 퀵 기간 프리셋 -->
+              <div class="quick-period-buttons">
+                <button type="button" class="btn-perm-period active" data-period="1970">1970~(전체)</button>
+                <button type="button" class="btn-perm-period" data-period="1987">1987~(블랙먼데이)</button>
+                <button type="button" class="btn-perm-period" data-period="2000">2000~(닷컴)</button>
+                <button type="button" class="btn-perm-period" data-period="2008">2008~(금융위기)</button>
+                <button type="button" class="btn-perm-period" data-period="2020">2020~(코로나)</button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- 4. 포트폴리오 비중 조절 (4대 자산 Custom Weights: SPY, TLT, GLD, BIL) -->
+            <div class="form-group">
+              <div class="label-row">
+                <label><i class="fa-solid fa-chart-pie"></i> 4대 자산 배분 비중 (합계 100%)</label>
+                <span class="val-preview highlight" id="permWeightsSum">합계: 100%</span>
+              </div>
+              <p class="field-desc">
+                주식(번영), 장기채(디플레), 금(인플레), 현금(불황) 4대 경제 국면에 대응하는 올웨더 배분입니다.
+              </p>
+
+              <!-- 퀵 비중 프리셋 버튼 -->
+              <div class="quick-perm-weights-buttons">
+                <button type="button" class="btn-perm-weight active" data-preset="classic">클래식 영구 (25:25:25:25)</button>
+                <button type="button" class="btn-perm-weight" data-preset="allweather">올웨더형 (30:40:15:15)</button>
+                <button type="button" class="btn-perm-weight" data-preset="growth">성장형 (50:25:15:10)</button>
+              </div>
+
+              <!-- 4개 자산 개별 슬라이더 & 숫자 입력 카드 -->
+              <div class="four-assets-grid">
+                <!-- 자산 1: 미국 주식 (SPY) -->
+                <div class="perm-asset-card asset-stock">
+                  <div class="asset-card-top">
+                    <span class="asset-title"><i class="fa-solid fa-arrow-trend-up"></i> 미국 주식 (SPY)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="permWeightSpy" min="0" max="100" value="25" step="1">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="permSliderSpy" min="0" max="100" value="25" class="asset-slider slider-stock">
+                  <span class="asset-role">경제 번영(Prosperity) 국면 견인</span>
+                </div>
+
+                <!-- 자산 2: 장기 국채 (TLT) -->
+                <div class="perm-asset-card asset-bond">
+                  <div class="asset-card-top">
+                    <span class="asset-title"><i class="fa-solid fa-landmark"></i> 장기 국채 (TLT)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="permWeightTlt" min="0" max="100" value="25" step="1">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="permSliderTlt" min="0" max="100" value="25" class="asset-slider slider-bond">
+                  <span class="asset-role">디플레이션(Deflation) & 금리인하 방어</span>
+                </div>
+
+                <!-- 자산 3: 금 (GLD) -->
+                <div class="perm-asset-card asset-gold">
+                  <div class="asset-card-top">
+                    <span class="asset-title"><i class="fa-solid fa-coins"></i> 금 현물 (GLD)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="permWeightGld" min="0" max="100" value="25" step="1">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="permSliderGld" min="0" max="100" value="25" class="asset-slider slider-gold">
+                  <span class="asset-role">인플레이션(Inflation) & 화폐가치 하락 방어</span>
+                </div>
+
+                <!-- 자산 4: 현금/단기채 (BIL) -->
+                <div class="perm-asset-card asset-cash">
+                  <div class="asset-card-top">
+                    <span class="asset-title"><i class="fa-solid fa-money-bill-wave"></i> 현금/단기채 (BIL)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="permWeightBil" min="0" max="100" value="25" step="1">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="permSliderBil" min="0" max="100" value="25" class="asset-slider slider-cash">
+                  <span class="asset-role">경기 침체(Recession) & 유동성 완충</span>
+                </div>
+              </div>
+
+              <!-- 4색 비중 바 -->
+              <div class="perm-bar-wrapper">
+                <div class="perm-bar">
+                  <div class="perm-bar-seg seg-stock" id="permBarSpy" style="width: 25%;"></div>
+                  <div class="perm-bar-seg seg-bond" id="permBarTlt" style="width: 25%;"></div>
+                  <div class="perm-bar-seg seg-gold" id="permBarGld" style="width: 25%;"></div>
+                  <div class="perm-bar-seg seg-cash" id="permBarBil" style="width: 25%;"></div>
+                </div>
+                <button type="button" class="btn-normalize" id="btnNormalizeWeights" title="비중을 100%로 자동 정규화">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> 100% 자동 맞춤
+                </button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- 5. 🌟 계절성(Seasonality) 달 선택 (영구 포트폴리오 동적 결합) 🌟 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label><i class="fa-solid fa-calendar-days"></i> 계절성 스위칭 설정 (매수 보유 달)</label>
+                <span class="count-badge" id="permActiveMonthsCount">12개월 상시보유</span>
+              </div>
+              <p class="field-desc">
+                체크된 달: 영구 포트폴리오(4대 자산) 보유 / 미체크 달: <strong>SGOV/BIL 100%</strong> 안전자산 파킹
+              </p>
+              <div class="preset-buttons">
+                <button type="button" class="btn-perm-season-preset active" data-preset="all">💎 전체보유(클래식)</button>
+                <button type="button" class="btn-perm-season-preset" data-preset="halloween">🎃 할로윈(11~4월)</button>
+                <button type="button" class="btn-perm-season-preset" data-preset="firstHalf">🌱 상반기(1~6)</button>
+                <button type="button" class="btn-perm-season-preset" data-preset="summer">☀️ 서머(6~8월)</button>
+                <button type="button" class="btn-perm-season-preset" data-preset="clear">🛡️ 전량파킹</button>
+              </div>
+              <div class="months-grid" id="permMonthsGrid">
+                <!-- JS 렌더링 -->
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- 6. 리밸런싱 주기 설정 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="permRebalMonths"><i class="fa-solid fa-arrows-spin"></i> 정기 리밸런싱 주기</label>
+                <span class="val-preview highlight" id="permRebalPreview">12개월 (연간 리밸런싱)</span>
+              </div>
+              <div class="rebal-control-container">
+                <div class="quick-rebal-buttons">
+                  <button type="button" class="btn-perm-rebal" data-rebal="1">월간(1M)</button>
+                  <button type="button" class="btn-perm-rebal" data-rebal="3">분기(3M)</button>
+                  <button type="button" class="btn-perm-rebal" data-rebal="6">반기(6M)</button>
+                  <button type="button" class="btn-perm-rebal active" data-rebal="12">1년(12M)</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 7. 고급 설정 -->
+            <details class="advanced-settings">
+              <summary><i class="fa-solid fa-gear"></i> 거래 비용 & 벤치마크 설정</summary>
+              <div class="advanced-content">
+                <div class="form-subgroup">
+                  <label for="permFeeRate">리밸런싱 편도 거래비용/슬리피지 (%)</label>
+                  <input type="number" id="permFeeRate" value="0.10" min="0" max="2" step="0.01">
+                </div>
+                <div class="form-subgroup">
+                  <label>비교 벤치마크</label>
+                  <div class="static-pill"><i class="fa-solid fa-chart-line"></i> S&P 500 (SPY 100%) & 전통 60/40</div>
+                </div>
+              </div>
+            </details>
+
+            <!-- 7. 백테스트 실행 버튼 -->
+            <div class="action-btn-container">
+              <button type="button" class="btn-primary" id="btnRunPermBacktest">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>영구 포트폴리오 백테스트 실행</span>
+              </button>
+            </div>
+          </form>
+        </aside>
+
+        <!-- 우측 메인 대시보드: 영구 포트폴리오 결과 뷰 -->
+        <main class="dashboard-display">
+          <!-- 상단 전략 인포 바 -->
+          <section class="strategy-summary-bar">
+            <div class="info-item">
+              <span class="info-lbl">포트폴리오 비중</span>
+              <span class="info-val" id="permInfoWeights">SPY 25% + TLT 25% + GLD 25% + BIL 25%</span>
+            </div>
+            <div class="info-item">
+              <span class="info-lbl">리밸런싱 주기</span>
+              <span class="info-val text-primary" id="permInfoRebal">12개월 (연간)</span>
+            </div>
+            <div class="info-item">
+              <span class="info-lbl">데이터 소스</span>
+              <span class="info-val text-warning"><i class="fa-brands fa-yahoo"></i> Yahoo Finance + 1970s Synthetic</span>
+            </div>
+            <div class="info-item">
+              <span class="info-lbl">백테스트 기간</span>
+              <span class="info-val" id="permInfoPeriod">1970-01-02 ~ 현재</span>
+            </div>
+          </section>
+
+          <!-- 1970년대 합성 데이터 공식 안내 배너 -->
+          <div class="synthetic-warning-banner">
+            <div class="banner-icon"><i class="fa-solid fa-shield-virus text-warning"></i></div>
+            <div class="banner-content">
+              <strong class="banner-title">1970년대 오리지널 영구 포트폴리오 가상 데이터(Synthetic Data) 적용 안내</strong>
+              <p class="banner-desc">
+                ⚠️ 1970~2000년대 ETF 상장 이전 데이터는 S&P 500(^GSPC), 30년 만기 미국채(^TYX), 금 선물(GC=F), 3개월 국채수익률(^IRX)을 활용해 역산 합성되었습니다. 1970년대 스태그플레이션, 1987 블랙먼데이, 2000 닷컴, 2008 금융위기를 아우르는 스트레스 테스트를 제공합니다.
+              </p>
+            </div>
+            <span class="banner-tag">Harry Browne All-Weather</span>
+          </div>
+
+          <!-- 4대 핵심 KPI 카드 (최종 평가금액, CAGR, 최대 낙폭 MDD, MAR Ratio) -->
+          <section class="metrics-grid">
+            <!-- 1. 최종 자산 평가액 -->
+            <div class="metric-card hero-card">
+              <div class="card-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+              <div class="metric-body">
+                <span class="card-title">최종 자산 평가액</span>
+                <div class="val-main text-bull" id="permFinalVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500 (100%):</span>
+                  <span class="sub-val" id="permFinalSpy">-</span>
+                </div>
+                <div class="delta-tag" id="permFinal6040">전통 60/40: -</div>
+              </div>
+            </div>
+
+            <!-- 2. 연평균 CAGR (복리수익률) -->
+            <div class="metric-card">
+              <div class="card-icon"><i class="fa-solid fa-trophy"></i></div>
+              <div class="metric-body">
+                <span class="card-title">연평균 CAGR (복리수익률)</span>
+                <div class="val-main text-bull" id="permCagrVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val" id="permCagrSpy">-</span>
+                </div>
+                <div class="delta-tag" id="permCagr6040">60/40: -</div>
+              </div>
+            </div>
+
+            <!-- 3. 최대 낙폭 MDD (방어력의 핵심) -->
+            <div class="metric-card alert-card">
+              <div class="card-icon"><i class="fa-solid fa-shield-halved"></i></div>
+              <div class="metric-body">
+                <span class="card-title">최대 낙폭 (전체 MDD)</span>
+                <div class="val-main text-bull" id="permMddVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val text-danger" id="permMddSpy">-</span>
+                </div>
+                <div class="risk-reduction-tag" id="permMddDefense">MDD 방어: -%p 개선</div>
+              </div>
+            </div>
+
+            <!-- 4. 샤프 지수 (Sharpe Ratio) -->
+            <div class="metric-card">
+              <div class="card-icon"><i class="fa-solid fa-chart-line-up"></i></div>
+              <div class="metric-body">
+                <span class="card-title">샤프 지수 (Sharpe Ratio)</span>
+                <div class="val-main" id="permSharpeVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val" id="permSharpeSpy">-</span>
+                </div>
+                <div class="sub-caption" id="permSharpe6040">60/40: -</div>
+              </div>
+            </div>
+
+            <!-- 5. MAR Ratio (CAGR / |MDD|) -->
+            <div class="metric-card">
+              <div class="card-icon"><i class="fa-solid fa-gauge-high"></i></div>
+              <div class="metric-body">
+                <span class="card-title">MAR 비율 (CAGR / |MDD|)</span>
+                <div class="val-main" id="permMarVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val" id="permMarSpy">-</span>
+                </div>
+                <div class="sub-caption" id="permMar6040">60/40 MAR: -</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 🌟 핵심 특화: 6대 역사적 위기 구간 방어력 분석 테이블 🌟 -->
+          <section class="table-panel">
+            <div class="table-header">
+              <h3><i class="fa-solid fa-skull-crossbones text-warning"></i> 역사적 위기 구간별 방어력 분석 (Crisis Stress Test)</h3>
+              <span class="table-tag">1970년대 오일쇼크부터 2022 긴축까지 올웨더 방어 실증</span>
+            </div>
+            <div class="table-responsive">
+              <table class="quant-table" id="permCrisisTable">
+                <thead>
+                  <tr>
+                    <th style="width: 25%;">위기 국면 (Crisis Period)</th>
+                    <th>영구 포트폴리오 수익률</th>
+                    <th>S&P 500 수익률</th>
+                    <th>전통 60/40 수익률</th>
+                    <th>영구 포트폴리오 MDD</th>
+                    <th>S&P 500 MDD</th>
+                    <th>방어 알파 (vs S&P 500)</th>
+                  </tr>
+                </thead>
+                <tbody id="permCrisisTableBody">
+                  <!-- JS로 렌더링 -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 차트 1: 포트폴리오 누적 수익률 차트 (Y축 Log Scale 필수) -->
+          <section class="chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-chart-line"></i> 포트폴리오 누적 자산 성장 곡선 (Growth of Wealth - Log Scale)</h3>
+                <p class="chart-subtitle">영구 포트폴리오 vs S&P 500 100% vs 전통 60/40 vs 누적 원금</p>
+              </div>
+              <div class="chart-controls">
+                <div class="btn-group-toggle">
+                  <button type="button" class="btn-toggle active" id="btnPermScaleLog">로그(Log)</button>
+                  <button type="button" class="btn-toggle" id="btnPermScaleLinear">선형</button>
+                </div>
+              </div>
+            </div>
+            <!-- 위기 음영 안내 바 -->
+            <div class="chart-notice-bar" style="background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); color: #93c5fd;">
+              <i class="fa-solid fa-circle-info"></i>
+              <span>차트상 1973 오일쇼크, 1987 블랙먼데이, 2000 닷컴, 2008 금융위기, 2020 코로나, 2022 긴축 위기 구간이 반영되어 있습니다.</span>
+            </div>
+            <div class="chart-wrapper main-chart-wrapper">
+              <canvas id="permEquityChart"></canvas>
+            </div>
+          </section>
+
+          <!-- 차트 2: 언더워터 낙폭(MDD) 비교 차트 -->
+          <section class="chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-water"></i> 언더워터 낙폭 비교 차트 (Underwater Drawdown)</h3>
+                <p class="chart-subtitle">전고점 대비 하락률(%) 추이 - S&P 500 및 60/40 대비 압도적 낙폭 억제력 시각화</p>
+              </div>
+            </div>
+            <div class="chart-wrapper dd-chart-wrapper" style="height: 260px;">
+              <canvas id="permDrawdownChart"></canvas>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div><!-- /panePermanent -->
+
+    <!-- ════════════════════════════════════════════════════════════
+         [Tab 3] 올웨더 포트폴리오 (Ray Dalio's All Weather Portfolio)
+         ════════════════════════════════════════════════════════════ -->
+    <div class="tab-pane" id="paneAllWeather" style="display: none;">
+      <div class="main-layout">
+        <!-- 좌측 컨트롤 사이드바: 올웨더 파라미터 제어 -->
+        <aside class="control-panel">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-cloud-sun-rain text-primary"></i> 올웨더 포트폴리오 제어</h2>
+            <span class="panel-subtitle">Ray Dalio's All-Weather Allocation (1970~현재)</span>
+          </div>
+
+          <form id="awForm" onsubmit="return false;">
+            <!-- 1. 초기 자본금 설정 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="awInitCap"><i class="fa-solid fa-wallet"></i> 초기 자본금</label>
+                <span class="val-preview" id="awInitCapPreview">5,000만 원</span>
+              </div>
+              <div class="input-with-unit">
+                <input type="number" id="awInitCap" value="50000000" min="1000000" step="1000000">
+                <span class="unit">원</span>
+              </div>
+            </div>
+
+            <!-- 2. 매월 적립금 설정 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="awMonthlyAdd"><i class="fa-solid fa-piggy-bank"></i> 매월 첫날 적립금</label>
+                <span class="val-preview" id="awMonthlyAddPreview">50만 원</span>
+              </div>
+              <div class="input-with-unit">
+                <input type="number" id="awMonthlyAdd" value="500000" min="0" step="50000">
+                <span class="unit">원</span>
+              </div>
+            </div>
+
+            <!-- 3. 백테스트 기간 설정 (1970-01-01부터) -->
+            <div class="form-group">
+              <div class="label-row">
+                <label><i class="fa-solid fa-calendar-days"></i> 백테스트 기간 설정 (1970~)</label>
+                <span class="val-preview" id="awPeriodPreview">1970년~현재 (54년)</span>
+              </div>
+              <div class="date-range-grid">
+                <div class="date-input-box">
+                  <span class="sub-label">시작 날짜 (Start: 1970~)</span>
+                  <input type="date" id="awStartDate" class="form-date-input" value="1970-01-02" min="1970-01-02">
+                </div>
+                <div class="date-input-box">
+                  <span class="sub-label">종료 날짜 (End: 최신)</span>
+                  <input type="date" id="awEndDate" class="form-date-input">
+                </div>
+              </div>
+              <div class="quick-period-buttons">
+                <button type="button" class="btn-aw-period active" data-period="1970">1970~(전체)</button>
+                <button type="button" class="btn-aw-period" data-period="1987">1987~(블랙먼데이)</button>
+                <button type="button" class="btn-aw-period" data-period="2000">2000~(닷컴)</button>
+                <button type="button" class="btn-aw-period" data-period="2008">2008~(금융위기)</button>
+                <button type="button" class="btn-aw-period" data-period="2020">2020~(코로나)</button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- 4. 포트폴리오 비중 조절 (Custom Weights 슬라이더 5개) -->
+            <div class="form-group">
+              <div class="label-row">
+                <label><i class="fa-solid fa-chart-pie"></i> 올웨더 5대 자산 비중 조절</label>
+                <span class="val-preview highlight" id="awWeightsSum">합계: 100%</span>
+              </div>
+              <p class="field-desc">
+                경제성장 및 인플레이션 4대 사계절 매트릭스를 완벽 방어하는 리스크 패리티 배분입니다.
+              </p>
+
+              <!-- 오리지널 비중 리셋 버튼 -->
+              <div class="quick-perm-weights-buttons" style="grid-template-columns: 1fr auto;">
+                <button type="button" class="btn-perm-weight active" id="btnAwResetClassic" title="레이 달리오 오리지널 사계절 비중으로 초기화">
+                  <i class="fa-solid fa-rotate-left"></i> 오리지널 비중 리셋 (30 : 40 : 15 : 7.5 : 7.5)
+                </button>
+                <button type="button" class="btn-normalize" id="btnNormalizeAwWeights" title="현재 비중을 합계 100%로 자동 정규화">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> 100% 맞춤
+                </button>
+              </div>
+
+              <!-- 5개 자산 개별 슬라이더 & 숫자 입력 카드 -->
+              <div class="four-assets-grid">
+                <!-- 자산 1: 미국 주식 (SPY) 30% -->
+                <div class="perm-asset-card asset-stock">
+                  <div class="asset-card-top">
+                    <span class="asset-title"><i class="fa-solid fa-arrow-trend-up"></i> 미국 주식 (SPY)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="awWeightSpy" min="0" max="100" value="30" step="0.5">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="awSliderSpy" min="0" max="100" value="30" step="0.5" class="asset-slider slider-stock">
+                  <span class="asset-role">기대 이상의 경제 성장 국면 (기본 30%)</span>
+                </div>
+
+                <!-- 자산 2: 장기 국채 (TLT) 40% -->
+                <div class="perm-asset-card asset-bond">
+                  <div class="asset-card-top">
+                    <span class="asset-title"><i class="fa-solid fa-landmark"></i> 장기 국채 (TLT)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="awWeightTlt" min="0" max="100" value="40" step="0.5">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="awSliderTlt" min="0" max="100" value="40" step="0.5" class="asset-slider slider-bond">
+                  <span class="asset-role">기대 이하의 경제 성장 & 디플레이션 (기본 40%)</span>
+                </div>
+
+                <!-- 자산 3: 중기 국채 (IEF) 15% -->
+                <div class="perm-asset-card" style="border-left: 3px solid #06b6d4;">
+                  <div class="asset-card-top">
+                    <span class="asset-title" style="color: #22d3ee;"><i class="fa-solid fa-building-columns"></i> 중기 국채 (IEF)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="awWeightIef" min="0" max="100" value="15" step="0.5">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="awSliderIef" min="0" max="100" value="15" step="0.5" class="asset-slider" style="accent-color: #06b6d4;">
+                  <span class="asset-role">안정적 이자 수익 및 변동성 완충 (기본 15%)</span>
+                </div>
+
+                <!-- 자산 4: 금 현물 (GLD) 7.5% -->
+                <div class="perm-asset-card asset-gold">
+                  <div class="asset-card-top">
+                    <span class="asset-title"><i class="fa-solid fa-coins"></i> 금 현물 (GLD)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="awWeightGld" min="0" max="100" value="7.5" step="0.5">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="awSliderGld" min="0" max="100" value="7.5" step="0.5" class="asset-slider slider-gold">
+                  <span class="asset-role">기대 이상의 인플레이션 및 화폐가치 방어 (기본 7.5%)</span>
+                </div>
+
+                <!-- 자산 5: 원자재 (DBC) 7.5% -->
+                <div class="perm-asset-card" style="border-left: 3px solid #eab308;">
+                  <div class="asset-card-top">
+                    <span class="asset-title" style="color: #facc15;"><i class="fa-solid fa-oil-well"></i> 원자재 (DBC)</span>
+                    <div class="input-pct-wrapper">
+                      <input type="number" id="awWeightDbc" min="0" max="100" value="7.5" step="0.5">
+                      <span class="pct-symbol">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="awSliderDbc" min="0" max="100" value="7.5" step="0.5" class="asset-slider" style="accent-color: #eab308;">
+                  <span class="asset-role">공급 쇼크 및 실물 원자재 랠리 헤지 (기본 7.5%)</span>
+                </div>
+              </div>
+
+              <!-- 5색 비중 바 -->
+              <div class="perm-bar-wrapper">
+                <div class="perm-bar">
+                  <div class="perm-bar-seg seg-stock" id="awBarSpy" style="width: 30%;"></div>
+                  <div class="perm-bar-seg seg-bond" id="awBarTlt" style="width: 40%;"></div>
+                  <div class="perm-bar-seg" id="awBarIef" style="width: 15%; background: #06b6d4;"></div>
+                  <div class="perm-bar-seg seg-gold" id="awBarGld" style="width: 7.5%;"></div>
+                  <div class="perm-bar-seg" id="awBarDbc" style="width: 7.5%; background: #eab308;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- 5. 🌟 계절성(Seasonality) 달 선택 (올웨더 포트폴리오 동적 결합) 🌟 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label><i class="fa-solid fa-calendar-days"></i> 계절성 스위칭 설정 (보유 달)</label>
+                <span class="count-badge" id="awActiveMonthsCount">12개월 상시보유</span>
+              </div>
+              <p class="field-desc">
+                체크된 달: 올웨더 5대 자산 보유 / 미체크 달: <strong>SGOV/BIL 100%</strong> 안전자산 파킹
+              </p>
+              <div class="preset-buttons">
+                <button type="button" class="btn-aw-season-preset active" data-preset="all">💎 전체보유(올웨더)</button>
+                <button type="button" class="btn-aw-season-preset" data-preset="halloween">🎃 할로윈(11~4월)</button>
+                <button type="button" class="btn-aw-season-preset" data-preset="firstHalf">🌱 상반기(1~6)</button>
+                <button type="button" class="btn-aw-season-preset" data-preset="summer">☀️ 서머(6~8월)</button>
+                <button type="button" class="btn-aw-season-preset" data-preset="clear">🛡️ 전량파킹</button>
+              </div>
+              <div class="months-grid" id="awMonthsGrid">
+                <!-- JS 렌더링 -->
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- 6. 리밸런싱 주기 설정 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="awRebalMonths"><i class="fa-solid fa-arrows-spin"></i> 정기 리밸런싱 주기</label>
+                <span class="val-preview highlight" id="awRebalPreview">12개월 (연간 리밸런싱)</span>
+              </div>
+              <div class="rebal-control-container">
+                <div class="quick-rebal-buttons">
+                  <button type="button" class="btn-aw-rebal" data-rebal="1">월간(1M)</button>
+                  <button type="button" class="btn-aw-rebal" data-rebal="3">분기(3M)</button>
+                  <button type="button" class="btn-aw-rebal" data-rebal="6">반기(6M)</button>
+                  <button type="button" class="btn-aw-rebal active" data-rebal="12">1년(12M)</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 7. 고급 설정 -->
+            <details class="advanced-settings">
+              <summary><i class="fa-solid fa-gear"></i> 거래 비용 & 벤치마크 설정</summary>
+              <div class="advanced-content">
+                <div class="form-subgroup">
+                  <label for="awFeeRate">리밸런싱 편도 거래비용/슬리피지 (%)</label>
+                  <input type="number" id="awFeeRate" value="0.10" min="0" max="2" step="0.01">
+                </div>
+                <div class="form-subgroup">
+                  <label>비교 벤치마크</label>
+                  <div class="static-pill"><i class="fa-solid fa-chart-line"></i> S&P 500 (SPY 100%) & 전통 60/40</div>
+                </div>
+              </div>
+            </details>
+
+            <!-- 8. 백테스트 실행 버튼 -->
+            <div class="action-btn-container">
+              <button type="button" class="btn-primary" id="btnRunAwBacktest">
+                <i class="fa-solid fa-cloud-sun-rain"></i>
+                <span>올웨더 포트폴리오 백테스트 실행</span>
+              </button>
+            </div>
+          </form>
+        </aside>
+
+        <!-- 우측 메인 대시보드: 올웨더 결과 뷰 -->
+        <main class="dashboard-display">
+          <!-- 상단 전략 인포 바 -->
+          <section class="strategy-summary-bar">
+            <div class="info-item">
+              <span class="info-lbl">포트폴리오 비중</span>
+              <span class="info-val" id="awInfoWeights">SPY 30% + TLT 40% + IEF 15% + GLD 7.5% + DBC 7.5%</span>
+            </div>
+            <div class="info-item">
+              <span class="info-lbl">리밸런싱 주기</span>
+              <span class="info-val text-primary" id="awInfoRebal">12개월 (연간)</span>
+            </div>
+            <div class="info-item">
+              <span class="info-lbl">데이터 소스</span>
+              <span class="info-val text-warning"><i class="fa-brands fa-yahoo"></i> Yahoo Finance + 1970s Synthetic</span>
+            </div>
+            <div class="info-item">
+              <span class="info-lbl">백테스트 기간</span>
+              <span class="info-val" id="awInfoPeriod">1970-01-02 ~ 현재</span>
+            </div>
+          </section>
+
+          <!-- 1970년대 합성 데이터 공식 안내 배너 -->
+          <div class="synthetic-warning-banner">
+            <div class="banner-icon"><i class="fa-solid fa-cloud-sun text-warning"></i></div>
+            <div class="banner-content">
+              <strong class="banner-title">레이 달리오 올웨더 사계절 가상 데이터(Synthetic Data) 적용 안내</strong>
+              <p class="banner-desc">
+                ⚠️ 1970~2000년대 ETF 상장 이전 데이터는 S&P 500(^GSPC), 30년 국채금리(^TYX), 10년 국채금리(^TNX), 금 선물(GC=F), 블룸버그/GSCI 원자재 지수를 활용해 역산 합성되었습니다. 차트 배경의 붉은 음영은 1973 오일쇼크, 2000 닷컴, 2008 금융위기, 2022 긴축 위기 구간을 나타냅니다.
+              </p>
+            </div>
+            <span class="banner-tag">Ray Dalio All-Weather</span>
+          </div>
+
+          <!-- 5대 핵심 KPI 요약 카드 (최종 평가금액, CAGR, 최대 낙폭 Worst MDD, 샤프 지수, MAR Ratio) -->
+          <section class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+            <!-- 1. 최종 자산 평가액 -->
+            <div class="metric-card hero-card">
+              <div class="card-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+              <div class="metric-body">
+                <span class="card-title">최종 자산 평가액</span>
+                <div class="val-main text-bull" id="awFinalVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val" id="awFinalSpy">-</span>
+                </div>
+                <div class="delta-tag" id="awFinal6040">전통 60/40: -</div>
+              </div>
+            </div>
+
+            <!-- 2. 연평균 수익률 (CAGR) -->
+            <div class="metric-card">
+              <div class="card-icon"><i class="fa-solid fa-trophy"></i></div>
+              <div class="metric-body">
+                <span class="card-title">연평균 수익률 (CAGR)</span>
+                <div class="val-main text-bull" id="awCagrVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val" id="awCagrSpy">-</span>
+                </div>
+                <div class="delta-tag" id="awCagr6040">60/40: -</div>
+              </div>
+            </div>
+
+            <!-- 3. 최대 낙폭 (Worst MDD) -->
+            <div class="metric-card alert-card">
+              <div class="card-icon"><i class="fa-solid fa-shield-halved"></i></div>
+              <div class="metric-body">
+                <span class="card-title">최대 낙폭 (Worst MDD)</span>
+                <div class="val-main text-bull" id="awMddVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val text-danger" id="awMddSpy">-</span>
+                </div>
+                <div class="risk-reduction-tag" id="awMddDefense">MDD 방어: -%p 개선</div>
+              </div>
+            </div>
+
+            <!-- 4. 샤프 지수 (Sharpe Ratio) -->
+            <div class="metric-card">
+              <div class="card-icon"><i class="fa-solid fa-chart-line-up"></i></div>
+              <div class="metric-body">
+                <span class="card-title">샤프 지수 (Sharpe Ratio)</span>
+                <div class="val-main" id="awSharpeVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val" id="awSharpeSpy">-</span>
+                </div>
+                <div class="sub-caption" id="awSharpe6040">60/40: -</div>
+              </div>
+            </div>
+
+            <!-- 5. MAR Ratio (CAGR / |MDD|) -->
+            <div class="metric-card">
+              <div class="card-icon"><i class="fa-solid fa-gauge-high"></i></div>
+              <div class="metric-body">
+                <span class="card-title">MAR 비율 (CAGR / |MDD|)</span>
+                <div class="val-main" id="awMarVal">-</div>
+                <div class="comparison-row">
+                  <span class="sub-label">S&P 500:</span>
+                  <span class="sub-val" id="awMarSpy">-</span>
+                </div>
+                <div class="sub-caption" id="awMar6040">60/40: -</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 6대 역사적 위기 구간 방어력 분석 테이블 -->
+          <section class="table-panel">
+            <div class="table-header">
+              <h3><i class="fa-solid fa-skull-crossbones text-warning"></i> 올웨더 역사적 위기 구간별 방어력 분석 (Crisis Stress Test)</h3>
+              <span class="table-tag">스태그플레이션, 금리인상, 폭락장에서도 살아남는 리스크 패리티</span>
+            </div>
+            <div class="table-responsive">
+              <table class="quant-table" id="awCrisisTable">
+                <thead>
+                  <tr>
+                    <th style="width: 25%;">위기 국면 (Crisis Period)</th>
+                    <th>올웨더 수익률</th>
+                    <th>S&P 500 수익률</th>
+                    <th>전통 60/40 수익률</th>
+                    <th>올웨더 MDD</th>
+                    <th>S&P 500 MDD</th>
+                    <th>방어 알파 (vs S&P 500)</th>
+                  </tr>
+                </thead>
+                <tbody id="awCrisisTableBody">
+                  <!-- JS로 렌더링 -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 차트 1: 포트폴리오 누적 수익률 차트 (Y축 Log Scale 필수 + 4대 위기 구간 옅은 붉은색 음영) -->
+          <section class="chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-chart-line"></i> 올웨더 누적 자산 성장 곡선 (Growth of Wealth - Log Scale)</h3>
+                <p class="chart-subtitle">올웨더 포트폴리오 vs S&P 500 100% vs 전통 60/40 vs 누적 원금 (위기 구간 붉은 음영 하이라이트)</p>
+              </div>
+              <div class="chart-controls">
+                <div class="btn-group-toggle">
+                  <button type="button" class="btn-toggle active" id="btnAwScaleLog">로그(Log)</button>
+                  <button type="button" class="btn-toggle" id="btnAwScaleLinear">선형</button>
+                </div>
+              </div>
+            </div>
+            <!-- 위기 음영 안내 바 -->
+            <div class="chart-notice-bar" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #fca5a5;">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>차트 배경의 옅은 붉은색 음영 구간: ① 1973 오일쇼크, ② 2000 닷컴 버블, ③ 2008 금융위기, ④ 2022 금리인상기</span>
+            </div>
+            <div class="chart-wrapper main-chart-wrapper">
+              <canvas id="awEquityChart"></canvas>
+            </div>
+          </section>
+
+          <!-- 차트 2: 언더워터 낙폭(MDD) 비교 차트 -->
+          <section class="chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-water"></i> 언더워터 낙폭 비교 차트 (Underwater Drawdown)</h3>
+                <p class="chart-subtitle">전고점 대비 하락률(%) 추이 - S&P 500 및 60/40 대비 올웨더의 충격 흡수력 시각화</p>
+              </div>
+            </div>
+            <div class="chart-wrapper dd-chart-wrapper" style="height: 260px;">
+              <canvas id="awDrawdownChart"></canvas>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div><!-- /paneAllWeather -->
+
+    <!-- ════════════════════════════════════════════════════════════
+         [Tab 4] 동적 자산 배분 (Dynamic Asset Allocation)
+         ════════════════════════════════════════════════════════════ -->
+    <div class="tab-pane" id="paneDynamic">
+      <!-- 1. 최상단 "지금 투자해야 하는 종목/ETF" 라이브 시그널 영웅 패널 -->
+      <section class="dyn-live-signal-hero" id="dynLiveSignalHero">
+        <div class="hero-top-bar">
+          <div class="hero-title-group">
+            <span class="live-pulse-dot"></span>
+            <h2><i class="fa-solid fa-satellite-dish"></i> 지금 투자해야 하는 종목 / ETF 라이브 시그널</h2>
+            <span class="dyn-as-of-badge" id="dynAsOfBadge">2026-11-13 종가 기준</span>
+          </div>
+          <div class="hero-regime-group">
+            <span class="regime-badge" id="dynRegimeBadge">🟢 공격 모드 (Risk-On)</span>
+          </div>
+        </div>
+
+        <div class="hero-body-grid">
+          <!-- 좌측: 국면 판단 근거 & 카나리아 조기경보 -->
+          <div class="hero-rationale-col">
+            <div class="rationale-box">
+              <div class="rationale-header">
+                <i class="fa-solid fa-brain"></i>
+                <span id="dynStratNameLabel">Bold Asset Allocation (BAA)</span> 국면 판단 근거
+              </div>
+              <p class="rationale-desc" id="dynRegimeRationale">
+                4대 카나리아 자산의 모멘텀 스코어에 따라 실시간 공격/방어 모드를 스위칭합니다.
+              </p>
+            </div>
+            
+            <!-- 카나리아 / 필터 지표 미니 카드 -->
+            <div class="canary-status-card" id="dynCanaryCard">
+              <div class="canary-card-header">
+                <i class="fa-solid fa-dove"></i>
+                <span>카나리아 조기 경보 지표 (Canary Momentum)</span>
+              </div>
+              <div class="canary-badges-row" id="dynCanaryList">
+                <!-- JS populated -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 우측: 이번 달 추천 매수 포트폴리오 (도넛 차트 + 테이블) -->
+          <div class="hero-portfolio-col">
+            <div class="hero-portfolio-header">
+              <span><i class="fa-solid fa-chart-pie"></i> 이번 달 추천 매수 포트폴리오</span>
+              <span class="hero-portfolio-sub">다음 리밸런싱까지 목표 비중 유지</span>
+            </div>
+            <div class="hero-portfolio-content">
+              <div class="donut-chart-box">
+                <canvas id="dynDonutChart" width="130" height="130"></canvas>
+              </div>
+              <div class="recom-table-box">
+                <table class="dyn-recom-table">
+                  <thead>
+                    <tr>
+                      <th>종목</th>
+                      <th>현재가</th>
+                      <th>모멘텀</th>
+                      <th>역할</th>
+                      <th style="text-align: right;">목표 비중</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dynRecomTableBody">
+                    <!-- JS populated -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. 메인 레이아웃: 좌측 컨트롤 사이드바 + 우측 백테스트 대시보드 -->
+      <div class="main-layout" style="margin-top: 24px;">
+        <!-- 좌측 컨트롤 패널 -->
+        <aside class="control-panel">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-sliders"></i> 동적 전략 설정</h2>
+            <span class="panel-subtitle">6대 계량 모멘텀 전략 백테스트</span>
+          </div>
+
+          <form id="dynForm" onsubmit="return false;">
+            <!-- 1. 전략 선택 -->
+            <div class="form-group">
+              <label for="dynStrategySelect"><i class="fa-solid fa-diagram-project"></i> 투자 전략 선택</label>
+              <select id="dynStrategySelect" class="form-select">
+                <option value="BAA" selected>BAA (Bold Asset Allocation)</option>
+                <option value="HAA">HAA (Hybrid Asset Allocation)</option>
+                <option value="LAA">LAA (Lethargic Asset Allocation)</option>
+                <option value="RAA">RAA (Robust Asset Allocation)</option>
+                <option value="GTAA">GTAA (Global Tactical Asset Allocation)</option>
+                <option value="GEM">듀얼 모멘텀 (Dual Momentum - GEM)</option>
+              </select>
+            </div>
+
+            <!-- 전략 상세 설명 카드 -->
+            <div class="dyn-strategy-desc-card" id="dynStrategyDescCard">
+              <div class="dyn-desc-title" id="dynDescTitle">BAA (Bold Asset Allocation)</div>
+              <p class="dyn-desc-text" id="dynDescText">
+                Wouter Keller의 대표 전략. 4대 카나리아(SPY, VEA, VWO, BND)의 13612W 모멘텀이 모두 양수면 QQQ, EFA 등 공격자산 상위 2종(각 50%)을 보유하고, 하나라도 음수면 안전자산 3종(각 33.3%)으로 대피합니다.
+              </p>
+            </div>
+
+            <!-- 2. 벤치마크 선택 -->
+            <div class="form-group">
+              <label for="dynBenchmarkSelect"><i class="fa-solid fa-scale-balanced"></i> 비교 벤치마크</label>
+              <select id="dynBenchmarkSelect" class="form-select">
+                <option value="SPY" selected>S&P 500 (SPY 100%)</option>
+                <option value="6040">전통적 60/40 (SPY 60% + IEF 40%)</option>
+              </select>
+            </div>
+
+            <!-- 3. 백테스트 기간 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label><i class="fa-solid fa-calendar-range"></i> 백테스트 기간 (1970~현재)</label>
+              </div>
+              <div class="date-input-group">
+                <div class="date-field">
+                  <span class="field-label">시작</span>
+                  <input type="date" id="dynStartDate" value="1970-01-01" min="1970-01-01">
+                </div>
+                <span class="date-sep">~</span>
+                <div class="date-field">
+                  <span class="field-label">종료</span>
+                  <input type="date" id="dynEndDate" value="">
+                </div>
+              </div>
+              <div class="period-btn-group" style="margin-top: 8px;">
+                <button type="button" class="btn-period btn-dyn-period active" data-period="all">전체 (1970~)</button>
+                <button type="button" class="btn-period btn-dyn-period" data-period="2000">2000~</button>
+                <button type="button" class="btn-period btn-dyn-period" data-period="2010">2010~</button>
+                <button type="button" class="btn-period btn-dyn-period" data-period="5y">최근 5년</button>
+              </div>
+            </div>
+
+            <!-- 4. 초기 자본금 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="dynInitCap"><i class="fa-solid fa-wallet"></i> 초기 자본금</label>
+                <span class="val-preview" id="dynInitCapPreview">5,000만 원</span>
+              </div>
+              <div class="input-with-unit">
+                <input type="number" id="dynInitCap" value="50000000" min="1000000" step="1000000">
+                <span class="unit">원</span>
+              </div>
+            </div>
+
+            <!-- 5. 매월 적립금 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="dynMonthlyAdd"><i class="fa-solid fa-piggy-bank"></i> 매월 첫날 적립금</label>
+                <span class="val-preview" id="dynMonthlyAddPreview">50만 원</span>
+              </div>
+              <div class="input-with-unit">
+                <input type="number" id="dynMonthlyAdd" value="500000" min="0" step="100000">
+                <span class="unit">원</span>
+              </div>
+            </div>
+
+            <!-- 6. 거래 수수료 -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="dynFeeRate"><i class="fa-solid fa-receipt"></i> 리밸런싱 수수료/슬리피지</label>
+                <span class="val-preview">비중 변경분만 차감</span>
+              </div>
+              <div class="input-with-unit">
+                <input type="number" id="dynFeeRate" value="0.1" min="0" max="2" step="0.01">
+                <span class="unit">%</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn-run" id="btnRunDynBacktest">
+              <i class="fa-solid fa-play"></i>
+              <span>동적 자산 배분 백테스트 실행</span>
+            </button>
+          </form>
+        </aside>
+
+        <!-- 우측 메인 결과 대시보드 -->
+        <main class="results-dashboard">
+          <!-- KPI 5대 핵심 지표 카드 -->
+          <div class="metrics-grid">
+            <div class="metric-card primary">
+              <div class="metric-header">
+                <span class="metric-title"><i class="fa-solid fa-coins"></i> 최종 평가금액</span>
+                <span class="metric-tag" id="dynKpiStratName">전략 성과</span>
+              </div>
+              <div class="metric-value-box">
+                <span class="metric-val" id="dynValFinal">-</span>
+                <span class="metric-unit">원</span>
+              </div>
+              <div class="metric-sub-rows">
+                <div class="sub-row">
+                  <span class="sub-label" id="dynBmLabel1">S&P 500:</span>
+                  <span class="sub-val" id="dynValBmFinal">-</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title"><i class="fa-solid fa-arrow-trend-up"></i> 연평균 수익률 (CAGR)</span>
+                <span class="metric-tag">복리</span>
+              </div>
+              <div class="metric-value-box">
+                <span class="metric-val highlight-green" id="dynCagrVal">-</span>
+                <span class="metric-unit">%</span>
+              </div>
+              <div class="metric-sub-rows">
+                <div class="sub-row">
+                  <span class="sub-label" id="dynBmLabel2">S&P 500:</span>
+                  <span class="sub-val" id="dynCagrBm">-</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title"><i class="fa-solid fa-shield-virus"></i> 최대 낙폭 (Worst MDD)</span>
+                <span class="metric-tag">리스크</span>
+              </div>
+              <div class="metric-value-box">
+                <span class="metric-val highlight-red" id="dynMddVal">-</span>
+                <span class="metric-unit">%</span>
+              </div>
+              <div class="metric-sub-rows">
+                <div class="sub-row">
+                  <span class="sub-label" id="dynBmLabel3">S&P 500:</span>
+                  <span class="sub-val" id="dynMddBm">-</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title"><i class="fa-solid fa-award"></i> 샤프 지수 (Sharpe)</span>
+                <span class="metric-tag">위험조정</span>
+              </div>
+              <div class="metric-value-box">
+                <span class="metric-val" id="dynSharpeVal">-</span>
+              </div>
+              <div class="metric-sub-rows">
+                <div class="sub-row">
+                  <span class="sub-label" id="dynBmLabel4">S&P 500:</span>
+                  <span class="sub-val" id="dynSharpeBm">-</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title"><i class="fa-solid fa-calculator"></i> MAR 비율 (CAGR / |MDD|)</span>
+                <span class="metric-tag">효율성</span>
+              </div>
+              <div class="metric-value-box">
+                <span class="metric-val" id="dynMarVal">-</span>
+              </div>
+              <div class="metric-sub-rows">
+                <div class="sub-row">
+                  <span class="sub-label" id="dynBmLabel5">S&P 500:</span>
+                  <span class="sub-val" id="dynMarBm">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 차트 1: 누적 자산 성장 곡선 -->
+          <section class="chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-chart-line"></i> 누적 자산 성장 곡선 (Portfolio Equity Curve)</h3>
+                <p class="chart-subtitle">동적 자산 배분 전략 vs 벤치마크 총 평가액 추이</p>
+              </div>
+              <div class="chart-controls">
+                <div class="btn-group-toggle">
+                  <button type="button" class="btn-toggle active" id="btnDynScaleLog">로그(Log)</button>
+                  <button type="button" class="btn-toggle" id="btnDynScaleLinear">선형</button>
+                </div>
+              </div>
+            </div>
+            <!-- 위기 음영 안내 바 -->
+            <div class="chart-notice-bar" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #fca5a5;">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>차트 배경의 옅은 붉은색 음영: ① 1973 오일쇼크, ② 1987 블랙먼데이, ③ 2000 닷컴버블, ④ 2008 금융위기, ⑤ 2020 코로나, ⑥ 2022 금리인상</span>
+            </div>
+            <div class="chart-wrapper main-chart-wrapper">
+              <canvas id="dynEquityChart"></canvas>
+            </div>
+          </section>
+
+          <!-- 차트 2: 언더워터 낙폭(MDD) 차트 -->
+          <section class="chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-water"></i> 언더워터 낙폭 비교 차트 (Underwater Drawdown)</h3>
+                <p class="chart-subtitle">전고점 대비 하락률(%) 추이 - 하락장 방어력 및 충격 흡수 성능 시각화</p>
+              </div>
+            </div>
+            <div class="chart-wrapper dd-chart-wrapper" style="height: 260px;">
+              <canvas id="dynDrawdownChart"></canvas>
+            </div>
+          </section>
+
+          <!-- 차트 3: 월별 포트폴리오 자산 비중 변화 히스토리 (Stacked Area Chart) -->
+          <section class="chart-panel">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-layer-group"></i> 월별 포트폴리오 자산 비중 변화 히스토리 (Asset Allocation History)</h3>
+                <p class="chart-subtitle">시간 경과에 따른 공격 자산과 안전/현금 자산의 포트폴리오 비중(%) 스택 추이</p>
+              </div>
+            </div>
+            <div class="chart-wrapper" style="height: 320px;">
+              <canvas id="dynWeightsChart"></canvas>
+            </div>
+          </section>
+
+          <!-- 6대 역사적 경제 위기 구간 방어력 분석 테이블 -->
+          <section class="chart-panel" style="margin-top: 24px;">
+            <div class="chart-header">
+              <div class="chart-title-area">
+                <h3><i class="fa-solid fa-shield-halved"></i> 6대 역사적 경제 위기 구간 방어력 분석 (Crisis Defense Alpha)</h3>
+                <p class="chart-subtitle">각 위기 구간에서 동적 전략이 벤치마크 대비 얼마나 손실을 줄이고 알파(초과수익)를 창출했는지 검증</p>
+              </div>
+            </div>
+            <div class="crisis-table-container">
+              <table class="crisis-table">
+                <thead>
+                  <tr>
+                    <th>위기 구간</th>
+                    <th>기간</th>
+                    <th>위기 성격</th>
+                    <th>전략 수익률</th>
+                    <th>벤치마크 수익률</th>
+                    <th>전략 MDD</th>
+                    <th>벤치마크 MDD</th>
+                    <th>방어 알파 (Alpha)</th>
+                  </tr>
+                </thead>
+                <tbody id="dynCrisisTableBody">
+                  <!-- JS populated -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div><!-- /paneDynamic -->
+  </div>
+
+  <!-- 로딩 오버레이 -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner-container">
+      <div class="quant-spinner"></div>
+      <p class="loading-text" id="loadingText">Yahoo Finance 데이터 연산 중...</p>
+      <span class="loading-subtext">과거 수정주가 및 복리 수익률/MDD를 계산하고 있습니다</span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
